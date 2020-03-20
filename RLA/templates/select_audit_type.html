@@ -1,0 +1,12 @@
+{% extends "base_template.html" %}
+
+<form action="select_type">
+    <label for="vote_type">Seleccionar Tipo de Votación</label>
+    <select id="vote_type" name="vote_type">
+        {% for type in voting_types %}
+            <option value="{{ type.value }}">{{ type.name }}</option>
+        {% endfor %}
+    </select>
+
+    <input type="submit">
+</form>

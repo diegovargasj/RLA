@@ -1,4 +1,8 @@
 class DHondt:
+    """
+    Class representing the D'Hondt voting system,
+    implementing a RLA for outcome verification
+    """
     def __init__(self, alpha, M, P, t, sw, sl, W):
         self.alpha = alpha
         self.M = M
@@ -30,6 +34,11 @@ class DHondt:
                     self.T[p][q] *= self.gamma_neg(p, q)
 
     def verified(self):
+        """
+        Checks if the process has been verified so far
+        @return:    {bool}
+                    True if the process has been verified, else False
+        """
         for p in self.P:
             for q in self.P:
                 if p != q and self.T[p][q] < 1.0 / self.alpha:

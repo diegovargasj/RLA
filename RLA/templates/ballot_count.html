@@ -1,0 +1,43 @@
+<form>
+<table id="ballot_count">
+    {% for candidate in candidates %}
+        <tr>
+            <td>
+                <label for="candidate{{ forloop.counter }}">Candidato {{ forloop.counter }}</label>
+            </td>
+            <td>
+                <input onblur="calcTotal()" type="number" id="candidate{{ forloop.counter }}" class="candidates" min="0">
+            </td>
+            <td>
+                votos
+            </td>
+        </tr>
+    {% endfor %}
+        <tr>
+            <td>
+                <label for="total">Total</label>
+            </td>
+            <td>
+                <input type="number" id="total" disabled>
+            </td>
+            <td>
+                votos
+            </td>
+        </tr>
+</table>
+</form>
+
+<script>
+    function calcTotal() {
+        const candidates = document.getElementsByClassName('candidates');
+        let tot = 0;
+        let val;
+        for (let i = 0; i < candidates.length; i++) {
+            val = parseInt(candidates[i].value);
+            if (val) {
+                tot += val;
+            }
+        }
+        document.getElementById('total').value = tot;
+    }
+</script>
