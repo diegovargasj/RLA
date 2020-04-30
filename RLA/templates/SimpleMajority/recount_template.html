@@ -1,0 +1,29 @@
+{% extends 'audit/base_template.html' %}
+
+{% block content %}
+    <table id="recount_tables">
+        <tr>
+            <th>Tables</th>
+            <th>Ballots</th>
+        </tr>
+        {% for table, ballots in tables.items %}
+            <tr>
+                <td>{{ table }}</td>
+                <td>{{ ballots }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+    <p>Total: {{ sample_size }}</p>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form }}
+        <input type="submit">
+    </form>
+    {% if form.errors %}
+      <ul>
+        {% for key,value in form.errors.items %}
+          <li>{{ key|escape }} : {{ value|escape }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+{% endblock %}

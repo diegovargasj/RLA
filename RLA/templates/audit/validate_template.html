@@ -1,0 +1,37 @@
+{% extends 'audit/base_template.html' %}
+
+{% block content %}
+    <table id="preliminary">
+        <tr>
+            <th>Candidate</th>
+            <th>Reported Ballot Count</th>
+        </tr>
+        {% for candidate, count in vote_count.items %}
+            <tr>
+                <td>{{ candidate }}</td>
+                <td>{{ count }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+    <table id="recount">
+        <tr>
+            <th>Candidate</th>
+            <th>Recounted Ballots</th>
+        </tr>
+        {% for candidate, count in recount.items %}
+            <tr>
+                <td>{{ candidate }}</td>
+                <td>{{ count }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+    <p>Max P-Value: {{ max_p_value }}</p>
+    {% if not is_validated %}
+        <p>Not Validated Yet</p>
+        <form action="{{ recount_url }}">
+            <input type="submit" value="Return to Recount" />
+        </form>
+    {% else %}
+        <p>Election Validated!</p>
+    {% endif %}
+{% endblock %}

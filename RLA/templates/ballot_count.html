@@ -1,3 +1,6 @@
+{% extends 'audit/base_template.html' %}
+
+{% block content %}
 <form>
 <table id="ballot_count">
     {% for candidate in candidates %}
@@ -41,3 +44,4 @@
         document.getElementById('total').value = tot;
     }
 </script>
+{% endblock %}

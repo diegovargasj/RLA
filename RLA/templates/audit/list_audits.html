@@ -1,0 +1,45 @@
+{% extends "audit/base_template.html" %}
+
+{% block content %}
+    <button onclick="location.href='/new/'" type="button">
+         New Audit
+    </button>
+    <table id="audit_list">
+        <tr>
+            <td>
+                N°
+            </td>
+            <td>
+                Type
+            </td>
+            <td>
+                Date
+            </td>
+            <td>
+                In Progress
+            </td>
+            <td>
+                View
+            </td>
+        </tr>
+        {% for audit in audits %}
+            <tr>
+            <td>
+                {{ forloop.counter }}
+            </td>
+            <td>
+                {{ audit.election_type }}
+            </td>
+            <td>
+                {{ audit.date }}
+            </td>
+            <td>
+                {{ audit.in_progress }}
+            </td>
+            <td>
+                <a href="/audit/view/{{ audit.pk }}/">Link</a>
+            </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% endblock %}

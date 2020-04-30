@@ -1,0 +1,16 @@
+{% extends 'audit/base_template.html' %}
+
+{% block content %}
+    <form action="/dhondt/create/" method="post">
+        {% csrf_token %}
+        {{ form }}
+        <input type="submit">
+    </form>
+    {% if form.errors %}
+      <ul>
+        {% for key,value in form.errors.items %}
+          <li>{{ key|escape }} : {{ value|escape }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+{% endblock %}
