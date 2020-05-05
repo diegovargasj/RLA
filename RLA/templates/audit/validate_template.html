@@ -1,29 +1,24 @@
 {% extends 'audit/base_template.html' %}
 
 {% block content %}
-    <table id="preliminary">
+    <table id="vote_count">
         <tr>
             <th>Candidate</th>
             <th>Reported Ballot Count</th>
+            <th>Recount</th>
         </tr>
-        {% for candidate, count in vote_count.items %}
+        {% for candidate, count in votes.items %}
             <tr>
                 <td>{{ candidate }}</td>
-                <td>{{ count }}</td>
+                <td>{{ count.preliminary }}</td>
+                <td>{{ count.recount }}</td>
             </tr>
         {% endfor %}
-    </table>
-    <table id="recount">
         <tr>
-            <th>Candidate</th>
-            <th>Recounted Ballots</th>
+            <th>Total</th>
+            <th>{{ total_count }}</th>
+            <th>{{ total_recount }}</th>
         </tr>
-        {% for candidate, count in recount.items %}
-            <tr>
-                <td>{{ candidate }}</td>
-                <td>{{ count }}</td>
-            </tr>
-        {% endfor %}
     </table>
     <p>Max P-Value: {{ max_p_value }}</p>
     {% if not is_validated %}

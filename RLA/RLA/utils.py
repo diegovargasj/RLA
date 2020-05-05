@@ -1,5 +1,4 @@
 import math
-import random
 from decimal import Decimal
 
 import requests
@@ -14,25 +13,35 @@ def get_random_seed(timestamp):
                             Random pulse value in bytes format
     """
     beacon_api = 'https://random.uchile.cl/beacon/2.0/pulse/time/'
-    seed_time = timestamp.timestamp()  # 13 digits with 0's at the end (1587495000000)
-    response = requests.get(beacon_api + seed_time)
+    seed_time = int(timestamp.timestamp() * 1000)  # 13 digits with 0's at the end (1587495000000)
+    response = requests.get(beacon_api + str(seed_time))
     random_seed = bytes.fromhex(response.json()['pulse']['localRandomValue'])
     return random_seed
 
 
-def get_n_random_ballots(audit, n, page, seed):
-    random.seed(seed)
-    ballots = []
-    for table in audit.table_set:
-        tot = 0
-        for registry in table.tableregistry_set:
-            tot += registry.preliminary_votes
+def get_sample(audit, sample_size):
+    sample = audit.shuffled[:sample_size]
+    tables = {}
+    for table, ballot in sample:
+        if table not in tables:
+            tables[table] = []
 
-        for i in range(tot):
-            ballots.append((table, i))
+        tables[table].append(ballot)
 
-    random.shuffle(ballots)
-    return ballots[n * page:n * (page + 1)]
+    for table in tables:
+        tables[table].sort()
+
+    tables = {table: ', '.join(tables[table]) for table in sorted(tables)}
+    return tables
+
+
+def max_p_value(subaudit):
+    p_value = 0
+    for w in subaudit.T:
+        for l in subaudit.T[w]:
+            p_value = max(p_value, 1 / subaudit.T[w][l])
+
+    return p_value
 
 
 def validated(T, alpha):

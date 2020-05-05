@@ -79,8 +79,12 @@ WSGI_APPLICATION = 'RLA.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'rla_db',
+        'USER': 'rla_user',
+        'PASSWORD': 'rla_password',
+        'HOST': 'localhost',
+        'PORT': 5432
     }
 }
 

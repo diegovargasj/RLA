@@ -1,6 +1,5 @@
 from django.db import models
 
-# Create your models here.
 from picklefield import PickledObjectField
 
 
@@ -16,6 +15,8 @@ class Audit(models.Model):
     preliminary_count = models.FileField()
     recount = models.FileField(blank=True, null=True)
     shuffled = PickledObjectField(default=list)
+    vote_count = PickledObjectField(default=dict)
+    accum_recount = PickledObjectField(default=dict)
 
 
 class SubAudit(models.Model):
@@ -30,10 +31,6 @@ class PseudiCandidate(models.Model):
 
 class BRAVOAudit(SubAudit):
     winners = models.IntegerField()
-
-
-class Candidate(PseudiCandidate):
-    subaudit = models.ForeignKey(BRAVOAudit, on_delete=models.PROTECT)
 
 
 class RecountRegistry(models.Model):

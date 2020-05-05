@@ -1,0 +1,19 @@
+{% extends 'audit/base_template.html' %}
+
+{% block content %}
+    <table id="preliminary">
+        <tr>
+            <th>Candidate</th>
+            <th>Reported Ballot Count</th>
+        </tr>
+        {% for candidate, count in vote_count.items %}
+            <tr>
+                <td>{{ candidate }}</td>
+                <td>{{ count }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+    <form action="/supermajority/recount/{{ audit_pk }}">
+        <input type="submit" value="Go to Recount" />
+    </form>
+{% endblock %}

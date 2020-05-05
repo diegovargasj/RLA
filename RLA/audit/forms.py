@@ -1,3 +1,4 @@
+import pandas as pd
 from django import forms
 
 from audit.models import BRAVOAudit, Audit
@@ -62,13 +63,17 @@ class CreateAuditForm(forms.Form):
     )
 
     def save(self):
+        df = pd.read_csv(self.cleaned_data['preliminary_count_file'])
+        vote_count = df.groupby('candidate').sum()['votes'].sort_values(ascending=False).to_dict()
         audit = Audit.objects.create(
             election_type=self.cleaned_data['election_type'],
             random_seed_time=self.cleaned_data['random_seed_time'],
             risk_limit=self.cleaned_data['risk_limit'],
             n_winners=self.cleaned_data['n_winners'],
             max_polls=self.cleaned_data['max_polls'],
-            preliminary_count=self.cleaned_data['preliminary_count_file']
+            preliminary_count=self.cleaned_data['preliminary_count_file'],
+            vote_count=vote_count,
+            accum_recount={c: 0 for c in vote_count}
         )
         audit.save()
         return audit
@@ -84,3 +89,21 @@ class BRAVOAuditForm(forms.ModelForm):
     class Meta:
         model = BRAVOAudit
         fields = ['winners']
+
+
+class RecountForm(forms.Form):
+    recount = forms.FileField()
+    recounted_ballots = forms.IntegerField(widget=forms.HiddenInput())
+
+    def is_valid(self):
+        valid = super().is_valid()
+        df = pd.read_csv(self.cleaned_data['recount'])
+        if not set(df.columns) <= {'table', 'candidate', 'votes'}:
+            valid = False
+            self.add_error('recount', 'Headers not valid')
+
+        if 'votes' in df.columns and df['votes'].sum() != self.cleaned_data['recounted_ballots']:
+            valid = False
+            self.add_error('recount', 'Incorrect number of recounted ballots')
+
+        return valid
