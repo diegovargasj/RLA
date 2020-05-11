@@ -1,7 +1,18 @@
 import math
+import operator
 from decimal import Decimal
 
 import requests
+
+
+SIMPLE_MAJORITY = 'simplemajority'
+SUPER_MAJORITY = 'supermajority'
+DHONDT = 'dhondt'
+
+BALLOT_POLLING = 'ballotpolling'
+COMPARISON = 'comparison'
+
+PRIMARY = 'primary'
 
 
 def get_random_seed(timestamp):
@@ -35,11 +46,11 @@ def get_sample(audit, sample_size):
     return tables
 
 
-def max_p_value(subaudit):
+def max_p_value(T):
     p_value = 0
-    for w in subaudit.T:
-        for l in subaudit.T[w]:
-            p_value = max(p_value, 1 / subaudit.T[w][l])
+    for w in T:
+        for l in T[w]:
+            p_value = max(p_value, 1 / T[w][l])
 
     return p_value
 
@@ -66,14 +77,14 @@ def validated(T, alpha):
 
 def d(s):
     """
-    Returns the divisor for column s. In this case, the divisor of
-    column s is always s
+    Returns the divisor for column s, starting from 0. In this case,
+    the divisor of column s is always s + 1
     @param s    :   {int}
                     Column number
     @return     :   {int}
                     Divisor of column s
     """
-    return s
+    return s + 1
 
 
 def t(p, vote_count):
@@ -172,3 +183,69 @@ def ASN(risk_limit, pw, pl, tot):
     """
     margin = (pw - pl) / tot
     return int(2 * math.log(1 / risk_limit) / margin ** 2)
+
+
+def uMax(party_votes, Sw, Sl):
+    """
+    Finds the upper bound on the overstatement per ballot on the MICRO for the contest
+    @param party_votes  :   {dict<str->int>}
+                            Reported casted ballots per party
+    @param Sw           :   {dict<str->int>}
+                            Largest divisor for any seat the party won
+    @param Sl           :   {dict<str->int>}
+                            Smallest divisor for any seat the party lost
+    @return             :   {float}
+                            Upper bound on overstatement per ballot
+    """
+    u = 0
+    for w in Sw:
+        for l in Sl:
+            if w != l:
+                u = max(u, (Sw[w] + Sl[l]) / (Sl[l] * party_votes[w] - Sw[w] * party_votes[l]))
+
+    return u
+
+
+def dhondt_sample_size(ballots, risk_limit, party_votes, Sw, Sl, gamma=0.95):
+    """
+    Finds the minimum sample size to audit a D'Hondt election
+    @param ballots      :   {int}
+                            Number of ballots cast in the contest
+    @param party_votes  :   {dict<str->int>}
+                            Total ballots cast per party
+    @param Sw           :   {dict<str->int>}
+                            Largest divisor for any seat the party won
+    @param Sl           :   {dict<str->int>}
+                            Smallest divisor for any seat the party lost
+    @param risk_limit   :   {float}
+                            Maximum p-value acceptable for any null hypothesis
+                            to consider the election verified
+    @param gamma        :   {float}
+                            Hedge against finding a ballot that attains
+                            the upper bound. Larger values give less protection
+    @return             :   {int}
+                            Sample size to audit
+    """
+    u = uMax(party_votes, Sw, Sl)
+    return math.ceil(
+        math.log(1 / risk_limit) / math.log(gamma / (1 - 1 / (ballots * u)) + 1.0 - gamma)
+    )
+
+
+def dhondt_W_L_sets(vote_count, n_winners):
+    """
+    Obtains the winner and loser sets, given the amount of votes
+    for each candidate
+    @param vote_count   :   {dict<str->int>}
+                            Dictionary with the reported amount of votes
+                            per candidate
+    @param n_winners    :   {int}
+                            Number of winners for the election
+    @return             :   {tuple<list<str>,list<str>>}
+                            Tuple with the winners and losers sets
+    """
+    tuples = list(vote_count.items())
+    sorted_tuples = sorted(tuples, key=operator.itemgetter(1), reverse=True)
+    W = [c[0] for c in sorted_tuples[:n_winners]]
+    L = [c[0] for c in sorted_tuples[n_winners:]]
+    return W, L

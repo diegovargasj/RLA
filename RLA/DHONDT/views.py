@@ -1,60 +1,54 @@
-from django.shortcuts import render, redirect
+import pandas as pd
 
-from DHONDT.forms import CreateDHONDTForm
-from RLA.utils import p
-
-
-def get_W_L_sets(vote_count, S):
-    """
-    Returns the reported winning and losing sets of parties
-    @param vote_count   :   {dict<models.Party->int>}
-                            Dictionary with the reported number of votes
-                            per party
-    @param S            :   {int}
-                            Number of seats being competed for
-    @return             :   {tuple<list<models.Party>, list<models.Party>>}
-                            Tuple with the reported winning and losing
-                            sets of parties
-    """
-    full_set = []
-    for i in range(1, S + 1):
-        for party in list(vote_count.keys()):
-            full_set.append((party, i))
-
-    sorted_tuples = sorted(full_set, key=(lambda x: p(x[0], vote_count, x[1])), reverse=True)
-    W = sorted_tuples[:S]
-    L = sorted_tuples[S:]
-    return W, L
+from RLA import utils
+from audit.views import PluralityPreliminaryView, PluralityRecountView, PluralityValidationView
 
 
-def create_view(request):
-    form = CreateDHONDTForm()
-    if request.method == 'POST':
-        form = CreateDHONDTForm(request.POST)
-        if form.is_valid():
-            audit = form.save()
-            return redirect(f'/dhondt/preliminary/{audit.pk}/')
-
-    context = {
-        'form': form,
-        'action': '/dhondt/create/'
-    }
-    return render(request, 'audit/form_template.html', context)
+class PreliminaryView(PluralityPreliminaryView):
+    template = 'DHONDT/preliminary_view.html'
 
 
-def preliminary_view(request, audit_pk):
-    if request.method == 'POST':
-        pass
+class RecountView(PluralityRecountView):
+    recount_template = 'DHONDT/recount_template.html'
+    validate_url = '/dhondt/validated'
 
-    context = {
-        'action': f'/dhondt/preliminary/{audit_pk}/'
-    }
-    return render(request, 'audit/form_template.html', context)
+    def _update_accum_recount(self, audit, recount):
+        df = pd.read_csv(audit.preliminary_count.path)
+        df['party'] = df['party'].fillna('')
+        parties = df.groupby('candidate')['party'].first().to_dict()
+        for c in recount:
+            party = parties[c]
+            audit.accum_recount[party] += recount[c]
+
+        audit.save()
+
+    def _get_sample_size(self, audit):
+        primary_subaudit = audit.subaudit_set.first()
+        N = sum(primary_subaudit.vote_count.values())
+        sample_size = utils.dhondt_sample_size(
+            N,
+            audit.risk_limit,
+            primary_subaudit.vote_count,
+            primary_subaudit.Sw,
+            primary_subaudit.Sl
+        ) * 5
+        return min(sample_size, len(audit.shuffled))
+
+    def _transform_primary_recount(self, audit, vote_recount):
+        df = pd.read_csv(audit.preliminary_count.path)
+        df['party'] = df['party'].fillna('')
+        party_per_candidate = df.groupby('candidate')['party'].first().to_dict()
+
+        transformed_recount = {}
+        for candidate in party_per_candidate:
+            if party_per_candidate[candidate] not in transformed_recount:
+                transformed_recount[party_per_candidate[candidate]] = 0
+
+            transformed_recount[party_per_candidate[candidate]] += vote_recount[candidate]
+
+        return transformed_recount
 
 
-def recount_view(request):
-    pass
-
-
-def validated_view(request):
-    pass
+class ValidationView(PluralityValidationView):
+    template = 'DHONDT/validate_template.html'
+    recount_url = '/dhondt/recount'

@@ -6,21 +6,24 @@
     </button>
     <table id="audit_list">
         <tr>
-            <td>
+            <th>
                 N°
-            </td>
-            <td>
+            </th>
+            <th>
                 Type
-            </td>
-            <td>
+            </th>
+            <th>
                 Date
-            </td>
-            <td>
+            </th>
+            <th>
                 In Progress
-            </td>
-            <td>
+            </th>
+            <th>
+                Validated
+            </th>
+            <th>
                 View
-            </td>
+            </th>
         </tr>
         {% for audit in audits %}
             <tr>
@@ -35,6 +38,9 @@
             </td>
             <td>
                 {{ audit.in_progress }}
+            </td>
+            <td>
+                {{ audit.validated }}
             </td>
             <td>
                 <a href="/audit/view/{{ audit.pk }}/">Link</a>

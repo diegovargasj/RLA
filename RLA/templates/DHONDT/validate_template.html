@@ -3,13 +3,13 @@
 {% block content %}
     <table id="vote_count">
         <tr>
-            <th>Candidate</th>
+            <th>Party</th>
             <th>Reported Ballot Count</th>
             <th>Recount</th>
         </tr>
-        {% for candidate, count in votes.items %}
+        {% for party, count in votes.items %}
             <tr>
-                <td>{{ candidate }}</td>
+                <td>{{ party }}</td>
                 <td>{{ count.preliminary }}</td>
                 <td>{{ count.recount }}</td>
             </tr>

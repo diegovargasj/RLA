@@ -1,14 +1,15 @@
 import pandas as pd
 from django import forms
 
-from audit.models import BRAVOAudit, Audit
+from audit.models import Audit
+from RLA import utils
 
 
 class ListElectionTypesForm(forms.Form):
     choices = (
-        ('simplemajority', 'Simple Majority'),
-        ('supermajority', 'Super Majority'),
-        ('dhondt', 'D\'Hondt')
+        (utils.SIMPLE_MAJORITY, 'Simple Majority'),
+        (utils.SUPER_MAJORITY, 'Super Majority'),
+        (utils.DHONDT, 'D\'Hondt')
     )
     types = forms.ChoiceField(
         choices=choices,
@@ -19,13 +20,13 @@ class ListElectionTypesForm(forms.Form):
 
 class CreateAuditForm(forms.Form):
     election_types = (
-        ('simplemajority', 'Simple Majority'),
-        ('supermajority', 'Super Majority'),
-        ('dhondt', 'D\'Hondt')
+        (utils.SIMPLE_MAJORITY, 'Simple Majority'),
+        (utils.SUPER_MAJORITY, 'Super Majority'),
+        (utils.DHONDT, 'D\'Hondt')
     )
     audit_types = (
-        ('ballotpolling', 'Ballot Polling'),
-        ('comparison', 'Comparison')
+        (utils.BALLOT_POLLING, 'Ballot Polling'),
+        (utils.COMPARISON, 'Comparison')
     )
     election_type = forms.ChoiceField(
         choices=election_types,
@@ -63,8 +64,6 @@ class CreateAuditForm(forms.Form):
     )
 
     def save(self):
-        df = pd.read_csv(self.cleaned_data['preliminary_count_file'])
-        vote_count = df.groupby('candidate').sum()['votes'].sort_values(ascending=False).to_dict()
         audit = Audit.objects.create(
             election_type=self.cleaned_data['election_type'],
             random_seed_time=self.cleaned_data['random_seed_time'],
@@ -72,8 +71,6 @@ class CreateAuditForm(forms.Form):
             n_winners=self.cleaned_data['n_winners'],
             max_polls=self.cleaned_data['max_polls'],
             preliminary_count=self.cleaned_data['preliminary_count_file'],
-            vote_count=vote_count,
-            accum_recount={c: 0 for c in vote_count}
         )
         audit.save()
         return audit
@@ -85,12 +82,6 @@ class AuditForm(forms.Form):
     max_polls = forms.IntegerField(min_value=1)
 
 
-class BRAVOAuditForm(forms.ModelForm):
-    class Meta:
-        model = BRAVOAudit
-        fields = ['winners']
-
-
 class RecountForm(forms.Form):
     recount = forms.FileField()
     recounted_ballots = forms.IntegerField(widget=forms.HiddenInput())
@@ -98,7 +89,7 @@ class RecountForm(forms.Form):
     def is_valid(self):
         valid = super().is_valid()
         df = pd.read_csv(self.cleaned_data['recount'])
-        if not set(df.columns) <= {'table', 'candidate', 'votes'}:
+        if not set(df.columns) >= {'table', 'candidate', 'votes'}:
             valid = False
             self.add_error('recount', 'Headers not valid')
 
