@@ -1,13 +1,18 @@
 from django.db import models
+import pandas as pd
 
+from cryptorandom.sample import random_sample
 from picklefield import PickledObjectField
+
+from RLA import utils
 
 
 class Audit(models.Model):
     date = models.DateTimeField(auto_now=True)
     in_progress = models.BooleanField(default=True)
     validated = models.BooleanField(default=False)
-    election_type = models.CharField(max_length=16, default='')
+    election_type = models.CharField(max_length=16)
+    audit_type = models.CharField(max_length=16)
     risk_limit = models.FloatField()
     random_seed = models.BinaryField(blank=True, null=True)
     random_seed_time = models.DateTimeField()
@@ -18,23 +23,97 @@ class Audit(models.Model):
     shuffled = PickledObjectField(default=list)
     vote_count = PickledObjectField(default=dict)
     accum_recount = PickledObjectField(default=dict)
+    max_p_value = models.FloatField(default=0)
+
+    def _update_accum_recounted(self, recount, save=True):
+        for c in recount:
+            self.accum_recount[c] += recount[c]
+
+        if save:
+            self.save()
+
+    def get_df(self, path):
+        df = pd.read_csv(path)
+        if self.election_type == utils.DHONDT:
+            df['party'] = df['party'].fillna('')
+
+        return df
+
+    def get_grouped(self, df):
+        if self.election_type == utils.DHONDT:
+            group = df.groupby('party')
+
+        else:  # self.election_type == utils.SIMPLE_MAJORITY or self.election_type == utils.SUPER_MAJORITY
+            group = df.groupby('candidate')
+
+        return group.sum()['votes'].sort_values(ascending=False).to_dict()
+
+    def add_polled_ballots(self, recount_df, save=True):
+        vote_recount = self.get_grouped(recount_df)
+        self._update_accum_recounted(vote_recount, save=False)
+        self.polled_ballots += sum(vote_recount.values())
+
+        if self.audit_type == utils.BALLOT_POLLING:
+            self.shuffled = self.shuffled[sum(vote_recount.values()):]
+
+        else:  # self.audit_type == utils.COMPARISON
+            table_count = len(recount_df['table'].unique())
+            self.shuffled = self.shuffled[table_count:]
+
+        if save:
+            self.save()
+
+    def init_shuffled(self, save=True):
+        seed = utils.get_random_seed(self.random_seed_time)
+        preliminary = pd.read_csv(self.preliminary_count.path)
+        if self.audit_type == utils.BALLOT_POLLING:
+            shuffled = []
+            table_count = preliminary.groupby('table').sum()['votes'].to_dict()
+            for table in table_count:
+                shuffled.extend(zip([table] * table_count[table], range(table_count[table])))
+
+            primary_subaudit = self.subaudit_set.get(identifier=utils.PRIMARY)
+            sample_size = min(self.max_polls, sum(primary_subaudit.vote_count.validate()))
+
+        else:  # audit.audit_type == utils.COMPARISON
+            shuffled = [(table, 'All') for table in preliminary['table'].unique()]
+            sample_size = len(shuffled)
+
+        shuffled = random_sample(
+            shuffled,
+            sample_size,
+            method='Fisher-Yates',
+            prng=int.from_bytes(seed, 'big')
+        )
+        self.random_seed = seed
+        self.shuffled = shuffled
+        if save:
+            self.save()
 
 
 class SubAudit(models.Model):
     identifier = models.CharField(max_length=16)
     audit = models.ForeignKey(Audit, on_delete=models.PROTECT)
-    Sw = PickledObjectField(default=dict)
-    Sl = PickledObjectField(default=dict)
-    T = PickledObjectField(default=dict)
+    Sw = PickledObjectField()
+    Sl = PickledObjectField()
+    T = PickledObjectField()
     max_p_value = models.FloatField(default=0)
-    vote_count = PickledObjectField(default=dict)
+    vote_count = PickledObjectField()
 
     class Meta:
         unique_together = ['identifier', 'audit']
 
+    def validated(self):
+        if self.audit.audit_type == utils.BALLOT_POLLING:
+            return utils.validated(self.T, self.audit.risk_limit)
 
-class PseudiCandidate(models.Model):
-    name = models.CharField(max_length=128)
+        else:  # self.audit.audit_type == utils.COMPARISON
+            return self.T >= 1 / self.audit.risk_limit
+
+    def get_W_L(self):
+        W = [p for p in self.Sw]
+        L = [p for p in self.Sl if p not in W]
+        return W, L
 
 
 class RecountRegistry(models.Model):

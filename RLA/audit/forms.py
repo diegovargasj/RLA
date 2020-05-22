@@ -66,6 +66,7 @@ class CreateAuditForm(forms.Form):
     def save(self):
         audit = Audit.objects.create(
             election_type=self.cleaned_data['election_type'],
+            audit_type=self.cleaned_data['audit_type'],
             random_seed_time=self.cleaned_data['random_seed_time'],
             risk_limit=self.cleaned_data['risk_limit'],
             n_winners=self.cleaned_data['n_winners'],
@@ -93,8 +94,12 @@ class RecountForm(forms.Form):
             valid = False
             self.add_error('recount', 'Headers not valid')
 
-        if 'votes' in df.columns and df['votes'].sum() != self.cleaned_data['recounted_ballots']:
-            valid = False
-            self.add_error('recount', 'Incorrect number of recounted ballots')
+        # votes = df['votes'].sum()
+        # if 'votes' in df.columns and votes != self.cleaned_data['recounted_ballots']:
+        #     valid = False
+        #     self.add_error(
+        #         'recount',
+        #         f'Incorrect number of recounted ballots: expected {self.cleaned_data["recounted_ballots"]}, got {votes}'
+        #     )
 
         return valid

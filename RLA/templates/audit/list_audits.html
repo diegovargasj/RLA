@@ -7,10 +7,13 @@
     <table id="audit_list">
         <tr>
             <th>
-                N°
+                #
             </th>
             <th>
-                Type
+                Election Type
+            </th>
+            <th>
+                Audit Type
             </th>
             <th>
                 Date
@@ -32,6 +35,9 @@
             </td>
             <td>
                 {{ audit.election_type }}
+            </td>
+            <td>
+                {{ audit.audit_type }}
             </td>
             <td>
                 {{ audit.date }}

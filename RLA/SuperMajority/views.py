@@ -10,7 +10,7 @@ class RecountView(PluralityRecountView):
     validate_url = '/supermajority/validated'
 
     def _transform_primary_count(self, audit, vote_count):
-        candidates = list(vote_count.keys())
+        candidates = list(audit.vote_count.keys())
         winner = candidates[0]
         grouped_count = {
             'Winner': vote_count[winner],

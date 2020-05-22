@@ -3,11 +3,13 @@
 {% block content %}
     <table id="recount_tables">
         <tr>
+            <th>#</th>
             <th>Tables</th>
             <th>Ballots</th>
         </tr>
         {% for table, ballots in tables.items %}
             <tr>
+                <td>{{ forloop.counter }}</td>
                 <td>{{ table }}</td>
                 <td>{{ ballots }}</td>
             </tr>

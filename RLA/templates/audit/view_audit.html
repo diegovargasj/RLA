@@ -1,5 +1,59 @@
 {% extends "audit/base_template.html" %}
 
 {% block content %}
-
+    <div id="audit">
+        <h2>Audit</h2>
+        <p>Date: {{ audit.date }}</p>
+        <p>In Progress: {{ audit.in_progress }}</p>
+        <p>Validated: {{ audit.validated }}</p>
+        <p>Election Type: {{ audit.election_type }}</p>
+        <p>Audit Type: {{ audit.audit_type }}</p>
+        <p>Risk Limit: {{ audit.risk_limit }}</p>
+        <p>Random Seed Time: {{ audit.random_seed_time|date:"Y-m-d H:i:s" }}</p>
+        <p>Random Seed: {{ audit.random_seed.hex }}</p>
+        <p># Winners: {{ audit.n_winners }}</p>
+        <p>Max Polls: {{ audit.max_polls }}</p>
+        <p>Polled Ballots: {{ audit.polled_ballots }}</p>
+        <p>Max P-Value: {{ audit.max_p_value }}</p>
+        <p>Preliminary Count File: <a href="{{ audit.preliminary_count.url }}">Download</a></p>
+    </div>
+    <div id="summary">
+        <h2>Ballot Count</h2>
+        <table id="vote_count">
+        <tr>
+            <th>Candidate</th>
+            <th>Reported Ballot Count</th>
+            <th>Recount</th>
+        </tr>
+        {% for candidate, count in votes.items %}
+            <tr>
+                <td>{{ candidate }}</td>
+                <td>{{ count.preliminary }}</td>
+                <td>{{ count.recount }}</td>
+            </tr>
+        {% endfor %}
+        <tr>
+            <th>Total</th>
+            <th>{{ total_count }}</th>
+            <th>{{ total_recount }}</th>
+        </tr>
+        </table>
+    </div>
+    <div id="recount-registries">
+        <h2>Recount Registries</h2>
+        <table>
+            <tr>
+                <th>#</th>
+                <th>Timestamp</th>
+                <th>File</th>
+            </tr>
+            {% for registry in audit.recountregistry_set.all|dictsort:"timestamp" %}
+                <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ registry.timestamp }}</td>
+                <td><a href="{{ registry.recount.url }}">Download</a></td>
+                </tr>
+            {% endfor %}
+        </table>
+    </div>
 {% endblock %}
