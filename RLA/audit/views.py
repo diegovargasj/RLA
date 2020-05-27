@@ -1,7 +1,11 @@
 import math
+import random
 from decimal import Decimal
+from multiprocessing import Pool
 
 import pandas as pd
+from cryptorandom.sample import random_sample
+import numpy as np
 from django.http import Http404, HttpResponseServerError
 from django.shortcuts import render, redirect
 from django.utils import timezone
@@ -193,6 +197,9 @@ class PluralityRecountView(TemplateView):
     def _transform_secondary_recount(self, audit, vote_recount):
         return vote_recount
 
+    def _comparison_table_transform(self, audit, vote_count):
+        return vote_count
+
     def _get_sample_size(self, audit):
         primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
         votes = list(primary_subaudit.vote_count.values())
@@ -205,6 +212,63 @@ class PluralityRecountView(TemplateView):
         ) // 2
         sample_size = min(sample_size, len(audit.shuffled))
         return sample_size
+
+    def _get_party_seat_pairs(self, audit):
+        primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
+        Wp, Lp = primary_subaudit.get_W_L()
+        W = [(c, 0) for c in Wp]
+        L = [(c, 0) for c in Lp]
+        return W, L
+
+    def _init_shuffled(self, audit):
+        seed = utils.get_random_seed(audit.random_seed_time)
+        preliminary = pd.read_csv(audit.preliminary_count.path)
+        if audit.audit_type == utils.BALLOT_POLLING:
+            shuffled = []
+            table_count = preliminary.groupby('table').sum()['votes'].to_dict()
+            for table in table_count:
+                shuffled.extend(zip([table] * table_count[table], range(table_count[table])))
+
+            primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
+            sample_size = min(audit.max_polls, sum(primary_subaudit.vote_count.values()))
+            weights = None
+
+        else:  # audit.audit_type == utils.COMPARISON
+            primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
+            Wp, Lp = primary_subaudit.get_W_L()
+            reported_vote_count = audit.get_grouped(preliminary)
+            reported = self._transform_primary_count(audit, reported_vote_count)
+            margin = {w: {l: reported[w] - reported[l] for l in Lp if l != w} for w in Wp}
+            pool = Pool(processes=4)
+            N = len(preliminary['table'].unique())
+            ps = np.empty(N, dtype=object)
+            shuffled = np.empty(N, dtype=tuple)
+            i = 0
+            for table, group in preliminary.groupby('table'):
+                shuffled[i] = (table, 'All')
+                vote_count = group.groupby('candidate').sum()['votes'].to_dict()
+                recount = self._transform_primary_recount(audit, vote_count)
+                p = pool.apply_async(utils.batch_error_upper_bound, args=(recount, margin, Wp, Lp))
+                ps[i] = p
+                i += 1
+
+            pool.close()
+            pool.join()
+
+            weights = [p.get() for p in ps]
+            sample_size = len(shuffled)
+
+        random.seed(seed)
+        shuffled = random.choices(shuffled, weights=weights, k=sample_size)
+        # shuffled = random_sample(
+        #     shuffled,
+        #     len(shuffled),
+        #     method='Fisher-Yates',
+        #     prng=int.from_bytes(seed, 'big')
+        # )
+        audit.random_seed = seed
+        audit.shuffled = shuffled
+        audit.save()
 
     def _samplesize2tables(self, audit, sample_size):
         df = pd.read_csv(audit.preliminary_count.path)
@@ -219,8 +283,9 @@ class PluralityRecountView(TemplateView):
         audit.save()
 
     def _process_comparison_subaudit(self, audit, subaudit, table_count, table_recount, W, L, um, U):
+        reported_count = self._transform_primary_count(audit, subaudit.vote_count)
         subaudit.T *= utils.comparison_SPRT(
-            subaudit.vote_count,
+            reported_count,
             table_count,
             table_recount,
             W,
@@ -256,23 +321,20 @@ class PluralityRecountView(TemplateView):
         subaudit_set = audit.subaudit_set.all()
 
         primary_subaudit = subaudit_set.get(identifier=utils.PRIMARY)
-        df = pd.read_csv(audit.preliminary_count.path)
+        df = audit.get_df(audit.preliminary_count.path)
         Wp, Lp = primary_subaudit.get_W_L()
-        u = utils.upper_bound(primary_subaudit.vote_count, Wp, Lp, primary_subaudit.Sw, primary_subaudit.Sl)
+        reported = self._transform_primary_count(audit, primary_subaudit.vote_count)
+        u = utils.MICRO_upper_bound(reported, Wp, Lp, primary_subaudit.Sw, primary_subaudit.Sl)
         V = max(df.groupby('table').sum()['votes'])
         um = u * V
         U = um * len(df['table'].unique())
-        # TODO change this for D'Hondt elections
-        W = [(c, 0) for c in Wp]
-        L = [(c, 0) for c in Lp]
-        for table in list(real_recount['table'].unique()):
+        for table, group in real_recount.groupby('table'):
+            W, L = self._get_party_seat_pairs(audit)
             reported_table = df[df['table'] == table]
             table_count = reported_table.groupby('candidate').sum()['votes'].sort_values(ascending=False).to_dict()
+            table_recount = group.groupby('candidate').sum()['votes'].sort_values(ascending=False).to_dict()
 
-            table_df = real_recount[real_recount['table'] == table]
-            table_recount = table_df.groupby('candidate').sum()['votes'].sort_values(ascending=False).to_dict()
-
-            primary_vote_count = self._transform_primary_count(audit, table_count)
+            primary_vote_count = self._comparison_table_transform(audit, table_count)
             primary_vote_recount = self._transform_primary_recount(audit, table_recount)
 
             self._process_comparison_subaudit(audit, primary_subaudit, primary_vote_count, primary_vote_recount, W, L, um, U)
@@ -280,6 +342,9 @@ class PluralityRecountView(TemplateView):
             secondary_vote_count = self._transform_secondary_count(audit, table_count)
             secondary_vote_recount = self._transform_secondary_recount(audit, table_recount)
             for subaudit in subaudit_set.exclude(identifier=utils.PRIMARY):
+                Wp, Lp = subaudit.get_W_L()
+                W = [(c, 0) for c in Wp]
+                L = [(c, 0) for c in Lp]
                 self._process_comparison_subaudit(audit, subaudit, secondary_vote_count, secondary_vote_recount, W, L, um, U)
 
         primary_subaudit.max_p_value = 1 / primary_subaudit.T
@@ -300,7 +365,7 @@ class PluralityRecountView(TemplateView):
             return HttpResponseServerError('Random pulse has not yet been emitted')
 
         if not audit.random_seed:
-            audit.init_shuffled()
+            self._init_shuffled(audit)
 
         sample_size = self._get_sample_size(audit)
         draw_size = sample_size
@@ -310,10 +375,13 @@ class PluralityRecountView(TemplateView):
         form = RecountForm(initial={'recounted_ballots': sample_size})
 
         tables = utils.get_sample(audit, draw_size)
+        df = audit.get_df(audit.preliminary_count.path)
+        df = df[df['table'].isin(tables.keys())]
+        true_sample_size = df['votes'].sum()
         context = {
             'form': form,
             'tables': tables,
-            'sample_size': sample_size,
+            'sample_size': true_sample_size,
             'audit_pk': audit_pk
         }
         return render(self.request, self.recount_template, context)
@@ -372,6 +440,7 @@ class PluralityValidationView(TemplateView):
         validated = all([subaudit.validated() for subaudit in audit.subaudit_set.all()])
         if validated:
             audit.validated = True
+            audit.shuffled = []  # to save space in database
 
         if audit.validated or audit.max_polls <= audit.polled_ballots:
             audit.in_progress = False

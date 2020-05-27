@@ -48,6 +48,17 @@ class RecountView(PluralityRecountView):
 
         return transformed_recount
 
+    def _comparison_table_transform(self, audit, vote_count):
+        return self._transform_primary_recount(audit, vote_count)
+
+    def _get_party_seat_pairs(self, audit):
+        primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
+        pseudo_candidate_votes = {
+            (p, i): utils.p(p, primary_subaudit.vote_count, i) for i in range(audit.n_winners)
+            for p in primary_subaudit.vote_count.keys() if p
+        }
+        return utils.dhondt_W_L_sets(pseudo_candidate_votes, audit.n_winners)
+
 
 class ValidationView(PluralityValidationView):
     template = 'DHONDT/validate_template.html'

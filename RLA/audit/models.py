@@ -1,7 +1,5 @@
-from django.db import models
 import pandas as pd
-
-from cryptorandom.sample import random_sample
+from django.db import models
 from picklefield import PickledObjectField
 
 from RLA import utils
@@ -60,33 +58,6 @@ class Audit(models.Model):
             table_count = len(recount_df['table'].unique())
             self.shuffled = self.shuffled[table_count:]
 
-        if save:
-            self.save()
-
-    def init_shuffled(self, save=True):
-        seed = utils.get_random_seed(self.random_seed_time)
-        preliminary = pd.read_csv(self.preliminary_count.path)
-        if self.audit_type == utils.BALLOT_POLLING:
-            shuffled = []
-            table_count = preliminary.groupby('table').sum()['votes'].to_dict()
-            for table in table_count:
-                shuffled.extend(zip([table] * table_count[table], range(table_count[table])))
-
-            primary_subaudit = self.subaudit_set.get(identifier=utils.PRIMARY)
-            sample_size = min(self.max_polls, sum(primary_subaudit.vote_count.validate()))
-
-        else:  # audit.audit_type == utils.COMPARISON
-            shuffled = [(table, 'All') for table in preliminary['table'].unique()]
-            sample_size = len(shuffled)
-
-        shuffled = random_sample(
-            shuffled,
-            sample_size,
-            method='Fisher-Yates',
-            prng=int.from_bytes(seed, 'big')
-        )
-        self.random_seed = seed
-        self.shuffled = shuffled
         if save:
             self.save()
 

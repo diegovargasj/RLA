@@ -45,7 +45,7 @@ def get_sample(audit, sample_size):
         if table not in tables:
             tables[table] = []
 
-        tables[table].append(ballot)
+        tables[table].append(str(ballot))
 
     for table in tables:
         tables[table].sort()
@@ -370,7 +370,7 @@ def MICRO(reported, table_report, recount, W, L):
     return micro
 
 
-def upper_bound(reported, Wp, Lp, Sw, Sl):
+def MICRO_upper_bound(reported, Wp, Lp, Sw, Sl):
     """
     MICRO upper bound for the contest
     @param reported :   {dict<str->int>}
@@ -394,3 +394,30 @@ def upper_bound(reported, Wp, Lp, Sw, Sl):
                 u = max(u, curr_u)
 
     return u
+
+
+def batch_error_upper_bound(batch_count, margin, Wp, Lp):
+    """
+    Upper bound on the error for a specific batch
+    @param batch_count  :   {dict<str->int>}
+                            Vote count for each candidate on the batch
+    @param margin       :   {dict<str->dict<str->int>>}
+                            Margin between each winner and loser
+    @param Wp           :   {list<str>}
+                            List of candidates that won at least 1 seat
+    @param Lp           :   {list<str>}
+                            List of candidates that lost at least 1 seat
+    @return             :   {float}
+                            Maximum upper bound on the error for the batch
+    """
+    up = 0
+    np = sum(batch_count.values())
+    for w in Wp:
+        for l in Lp:
+            if w != l:
+                up = max(
+                    up,
+                    (batch_count[w] - batch_count[l] + np) / margin[w][l]
+                )
+
+    return up

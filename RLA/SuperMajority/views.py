@@ -21,6 +21,9 @@ class RecountView(PluralityRecountView):
     def _transform_primary_recount(self, audit, vote_recount):
         return self._transform_primary_count(audit, vote_recount)
 
+    def _comparison_table_transform(self, audit, vote_count):
+        return self._transform_primary_count(audit, vote_count)
+
 
 class ValidationView(PluralityValidationView):
     recount_url = '/supermajority/recount'
