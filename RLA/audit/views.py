@@ -1,7 +1,6 @@
 import math
 import random
 from decimal import Decimal
-from multiprocessing import Pool
 
 import pandas as pd
 from cryptorandom.sample import random_sample
@@ -42,8 +41,8 @@ class CreateAuditView(TemplateView):
         else:  # audit.audit_type == utils.COMPARISON
             subaudit.T = 1.0
 
-        subaudit.Sw = {w: 1 for w in W}
-        subaudit.Sl = {l: 1 for l in L}
+        subaudit.Sw = {w: 0 for w in W}
+        subaudit.Sl = {l: 0 for l in L}
         return subaudit
 
     @staticmethod
@@ -98,10 +97,10 @@ class CreateAuditView(TemplateView):
             wp = list(filter(lambda x: x[0] == party, W))
             lp = list(filter(lambda x: x[0] == party, L))
             if wp:
-                primary_subaudit.Sw[party] = max(wp, key=lambda x: x[1])[1] + 1
+                primary_subaudit.Sw[party] = max(wp, key=lambda x: x[1])[1]
 
             if lp:
-                primary_subaudit.Sl[party] = min(lp, key=lambda x: x[1])[1] + 1
+                primary_subaudit.Sl[party] = min(lp, key=lambda x: x[1])[1]
 
         primary_subaudit.save()
         for party in Wp:
@@ -204,12 +203,16 @@ class PluralityRecountView(TemplateView):
         primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
         votes = list(primary_subaudit.vote_count.values())
         votes.sort(reverse=True)
+        candidates = list(primary_subaudit.vote_count.keys())
+        candidates = sorted(candidates, key=lambda c: primary_subaudit.vote_count[c], reverse=True)
+        W = candidates[:audit.n_winners]
+        L = candidates[audit.n_winners:]
         sample_size = utils.ASN(
-            audit.risk_limit,
-            votes[audit.n_winners - 1],
-            votes[audit.n_winners],
-            sum(primary_subaudit.vote_count.values())
-        ) // 2
+            audit.risk_limit / audit.max_p_value,
+            primary_subaudit.vote_count,
+            W,
+            L
+        )
         sample_size = min(sample_size, len(audit.shuffled))
         return sample_size
 
@@ -226,7 +229,7 @@ class PluralityRecountView(TemplateView):
         if audit.audit_type == utils.BALLOT_POLLING:
             shuffled = []
             table_count = preliminary.groupby('table').sum()['votes'].to_dict()
-            for table in table_count:
+            for table in sorted(table_count):
                 shuffled.extend(zip([table] * table_count[table], range(table_count[table])))
 
             primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
@@ -239,23 +242,19 @@ class PluralityRecountView(TemplateView):
             reported_vote_count = audit.get_grouped(preliminary)
             reported = self._transform_primary_count(audit, reported_vote_count)
             margin = {w: {l: reported[w] - reported[l] for l in Lp if l != w} for w in Wp}
-            pool = Pool(processes=4)
             N = len(preliminary['table'].unique())
-            ps = np.empty(N, dtype=object)
             shuffled = np.empty(N, dtype=tuple)
+            weights = np.empty(N, dtype=float)
             i = 0
             for table, group in preliminary.groupby('table'):
-                shuffled[i] = (table, 'All')
                 vote_count = group.groupby('candidate').sum()['votes'].to_dict()
+                shuffled[i] = (table, 'All')
                 recount = self._transform_primary_recount(audit, vote_count)
-                p = pool.apply_async(utils.batch_error_upper_bound, args=(recount, margin, Wp, Lp))
-                ps[i] = p
+                u = utils.batch_error_upper_bound(recount, margin, Wp, Lp)
+                weights[i] = u
                 i += 1
 
-            pool.close()
-            pool.join()
-
-            weights = [p.get() for p in ps]
+            shuffled = sorted(shuffled, key=lambda pair: pair[0])
             sample_size = len(shuffled)
 
         random.seed(seed)
@@ -377,11 +376,13 @@ class PluralityRecountView(TemplateView):
         tables = utils.get_sample(audit, draw_size)
         df = audit.get_df(audit.preliminary_count.path)
         df = df[df['table'].isin(tables.keys())]
-        true_sample_size = df['votes'].sum()
+        if audit.audit_type == utils.COMPARISON:
+            sample_size = df['votes'].sum()
+
         context = {
             'form': form,
             'tables': tables,
-            'sample_size': true_sample_size,
+            'sample_size': sample_size,
             'audit_pk': audit_pk
         }
         return render(self.request, self.recount_template, context)

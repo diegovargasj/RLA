@@ -21,7 +21,7 @@ class Audit(models.Model):
     shuffled = PickledObjectField(default=list)
     vote_count = PickledObjectField(default=dict)
     accum_recount = PickledObjectField(default=dict)
-    max_p_value = models.FloatField(default=0)
+    max_p_value = models.FloatField(default=1)
 
     def _update_accum_recounted(self, recount, save=True):
         for c in recount:

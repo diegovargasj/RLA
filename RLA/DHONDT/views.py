@@ -27,11 +27,11 @@ class RecountView(PluralityRecountView):
         N = sum(primary_subaudit.vote_count.values())
         sample_size = utils.dhondt_sample_size(
             N,
-            audit.risk_limit,
+            audit.risk_limit / audit.max_p_value,
             primary_subaudit.vote_count,
             primary_subaudit.Sw,
             primary_subaudit.Sl
-        ) * 5
+        )
         return min(sample_size, len(audit.shuffled))
 
     def _transform_primary_recount(self, audit, vote_recount):

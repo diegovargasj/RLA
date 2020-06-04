@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pandas as pd
 from django import forms
 
@@ -68,7 +70,7 @@ class CreateAuditForm(forms.Form):
             election_type=self.cleaned_data['election_type'],
             audit_type=self.cleaned_data['audit_type'],
             random_seed_time=self.cleaned_data['random_seed_time'],
-            risk_limit=self.cleaned_data['risk_limit'],
+            risk_limit=Decimal(self.cleaned_data['risk_limit']),
             n_winners=self.cleaned_data['n_winners'],
             max_polls=self.cleaned_data['max_polls'],
             preliminary_count=self.cleaned_data['preliminary_count_file'],

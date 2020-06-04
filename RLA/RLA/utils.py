@@ -103,7 +103,7 @@ def e(p, reported, recount):
     @return         :   {int}
                         Reported - recounted cast ballots for party p
     """
-    return reported[p] - recount[p]
+    return t(p, reported) - t(p, recount)
 
 
 def d(s):
@@ -171,18 +171,12 @@ def gamma(p, q, Sw, Sl, vote_count):
                             Likelihood ratio between pseudo candidates p and q,
                             given a vote for p
     """
-    if Sw is None:
-        Sw = {p: 1}
-
-    if Sl is None:
-        Sl = {q: 1}
-
     y1 = t(p, vote_count) / (t(p, vote_count) + t(q, vote_count))
     y2 = (d(Sw[p]) + d(Sl[q])) / d(Sw[p])
     return Decimal(y1 * y2)
 
 
-def ballot_polling_SPRT(vote_count, recount, T, risk_limit, Sw=None, Sl=None):
+def ballot_polling_SPRT(vote_count, recount, T, risk_limit, Sw, Sl):
     """
     Calculates Wald's Sequential Probability Ratio Test for each contest between
     winner-loser, for the recounted ballots in ballot polling form
@@ -240,27 +234,36 @@ def comparison_SPRT(report_count, table_report, table_recount, W, L, um, U, gamm
     return gamma * (1 - Dm) / (1 - 1 / U) + 1 - gamma
 
 
-def ASN(risk_limit, pw, pl, tot):
+def ASN(risk_limit, vote_count, W, L):
     """
     Wald's Average Sample Number to estimate the number of ballots needed to
-    sample to verify the election
+    sample to verify the election, assuming no invalid votes (nearly true, since
+    they are usually a very small portion of the total)
     @param risk_limit   :   {float}
                             Maximum p-value acceptable for any null hypothesis
                             to consider the election verified
-    @param pw           :   {int}
-                            Number of reported ballots for the winner with
-                            the least votes
-    @param pl           :   {int}
-                            Number of reported ballots for the loser with
-                            most votes
-    @param tot          :   {int}
-                            Total number of casted ballots
+    @param vote_count   :   {dict<str->int>}
+                            Number of reported ballots per candidate
+    @param W            :   {list<str>}
+                            List of winning candidates
+    @param L            :   {list<str>}
+                            List of losing candidates
     @return             :   {int}
                             Estimated number of ballots needed to audit to
                             verify the election
     """
-    margin = (pw - pl) / tot
-    return int(2 * math.log(1 / risk_limit) / margin ** 2)
+    asn = 0
+    for w in W:
+        for l in L:
+            pw = vote_count[w] / (vote_count[w] + vote_count[l])
+            pl = vote_count[l] / (vote_count[w] + vote_count[l])
+            sw = pw
+            zw = math.log(2 * sw)
+            zl = math.log(2 - 2 * sw)
+            curr_asn = (math.log(1 / risk_limit) + zw / 2) / (pw * zw + pl * zl)
+            asn = max(asn, curr_asn)
+
+    return math.ceil(asn)
 
 
 def uMax(party_votes, Sw, Sl):
@@ -279,7 +282,7 @@ def uMax(party_votes, Sw, Sl):
     for w in Sw:
         for l in Sl:
             if w != l:
-                u = max(u, (Sw[w] + Sl[l]) / (Sl[l] * party_votes[w] - Sw[w] * party_votes[l]))
+                u = max(u, (d(Sw[w]) + d(Sl[l])) / (d(Sl[l]) * party_votes[w] - d(Sw[w]) * party_votes[l]))
 
     return u
 
