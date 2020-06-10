@@ -1,8 +1,11 @@
+import bisect
+import itertools
 import math
 import operator
 from decimal import Decimal
 
 import requests
+from clcert_chachagen import ChaChaGen
 
 SIMPLE_MAJORITY = 'simplemajority'
 SUPER_MAJORITY = 'supermajority'
@@ -25,7 +28,7 @@ def get_random_seed(timestamp):
     beacon_api = 'https://random.uchile.cl/beacon/2.0/pulse/time/'
     seed_time = int(timestamp.timestamp() * 1000)  # 13 digits with 0's at the end (1587495000000)
     response = requests.get(beacon_api + str(seed_time))
-    random_seed = bytes.fromhex(response.json()['pulse']['localRandomValue'])
+    random_seed = response.json()['pulse']['localRandomValue']
     return random_seed
 
 
@@ -424,3 +427,31 @@ def batch_error_upper_bound(batch_count, margin, Wp, Lp):
                 )
 
     return up
+
+
+def random_sample(population, sample_size, weights=None, seed=None):
+    """
+    Generate a random sample from the given population, following the weight
+    distribution and the random seed
+    @param population   :   {iterable}
+                            Universe from which to obtain the random sample
+    @param sample_size  :   {int}
+                            Random sample size
+    @param weights      :   {list<float>}
+                            Weight distribution for the random sample
+    @param seed         :   {int|bytes}
+                            Random seed
+    @return             :   {list<any>}
+                            Random sample of size <sample_size>
+    """
+    chacha = ChaChaGen(seed=seed)
+    if weights is None:
+        weights = [1] * len(population)
+
+    cum_weights = list(itertools.accumulate(weights))
+    total = cum_weights[-1]
+    hi = len(cum_weights) - 1
+    return [
+        population[bisect.bisect(cum_weights, chacha.random() * total, 0, hi)]
+        for i in range(sample_size)
+    ]
