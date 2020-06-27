@@ -3,3 +3,4 @@ django-picklefield
 requests
 pandas
 psycopg2
+git+https://github.com/clcert/ChaCha20-Generator-Utilities.git#subdirectory=python

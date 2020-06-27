@@ -199,20 +199,35 @@ class PluralityRecountView(TemplateView):
 
     def _get_sample_size(self, audit):
         primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
-        votes = list(primary_subaudit.vote_count.values())
-        votes.sort(reverse=True)
-        candidates = list(primary_subaudit.vote_count.keys())
-        candidates = sorted(candidates, key=lambda c: primary_subaudit.vote_count[c], reverse=True)
-        W = candidates[:audit.n_winners]
-        L = candidates[audit.n_winners:]
-        sample_size = utils.ASN(
-            audit.risk_limit / audit.max_p_value,
-            primary_subaudit.vote_count,
-            W,
-            L
-        )
+        if audit.audit_type == utils.BALLOT_POLLING:
+            votes = list(primary_subaudit.vote_count.values())
+            votes.sort(reverse=True)
+            candidates = list(primary_subaudit.vote_count.keys())
+            candidates = sorted(candidates, key=lambda c: primary_subaudit.vote_count[c], reverse=True)
+            W = candidates[:audit.n_winners]
+            L = candidates[audit.n_winners:]
+            sample_size = utils.ASN(
+                audit.risk_limit / audit.max_p_value,
+                primary_subaudit.vote_count,
+                W,
+                L
+            )
+
+        else:
+            Wp, Lp = primary_subaudit.get_W_L()
+            reported = self._transform_primary_count(audit, primary_subaudit.vote_count)
+            u = utils.MICRO_upper_bound(reported, Wp, Lp, primary_subaudit.Sw, primary_subaudit.Sl)
+            df = pd.read_csv(audit.preliminary_count.path)
+            V = df.groupby('table').sum()['votes'].max()
+            um = u * V
+            U = um * len(df['table'].unique())
+            sample_size = utils.comparison_sample_size(
+                U,
+                audit.risk_limit / primary_subaudit.max_p_value
+            )
+
         sample_size = min(sample_size, len(audit.shuffled))
-        return sample_size * 20
+        return sample_size
 
     def _get_party_seat_pairs(self, audit):
         primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
@@ -364,8 +379,6 @@ class PluralityRecountView(TemplateView):
 
         sample_size = self._get_sample_size(audit)
         draw_size = sample_size
-        if audit.audit_type == utils.COMPARISON:
-            draw_size = self._samplesize2tables(audit, sample_size)
 
         form = RecountForm(initial={'recounted_ballots': sample_size})
 
@@ -413,8 +426,6 @@ class PluralityRecountView(TemplateView):
 
         sample_size = self._get_sample_size(audit)
         draw_size = sample_size
-        if audit.audit_type == utils.COMPARISON:
-            draw_size = self._samplesize2tables(audit, sample_size)
 
         tables = utils.get_sample(audit, draw_size)
         context = {

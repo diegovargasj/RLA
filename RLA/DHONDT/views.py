@@ -25,13 +25,29 @@ class RecountView(PluralityRecountView):
     def _get_sample_size(self, audit):
         primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
         N = sum(primary_subaudit.vote_count.values())
-        sample_size = utils.dhondt_sample_size(
-            N,
-            audit.risk_limit / primary_subaudit.max_p_value,
-            primary_subaudit.vote_count,
-            primary_subaudit.Sw,
-            primary_subaudit.Sl
-        )
+        if audit.audit_type == utils.BALLOT_POLLING:
+            sample_size = utils.dhondt_sample_size(
+                N,
+                audit.risk_limit / primary_subaudit.max_p_value,
+                primary_subaudit.vote_count,
+                primary_subaudit.Sw,
+                primary_subaudit.Sl
+            )
+
+        else:
+            Wp, Lp = primary_subaudit.get_W_L()
+            reported = self._transform_primary_count(audit, primary_subaudit.vote_count)
+            u = utils.MICRO_upper_bound(reported, Wp, Lp, primary_subaudit.Sw, primary_subaudit.Sl)
+            df = pd.read_csv(audit.preliminary_count.path)
+            V = df.groupby('table').sum()['votes'].max()
+            um = u * V
+            U = um * len(df['table'].unique())
+            sample_size = utils.comparison_sample_size(
+                U,
+                audit.risk_limit / primary_subaudit.max_p_value
+            )
+
+        sample_size = min(sample_size, len(audit.shuffled))
         for subaudit in audit.subaudit_set.exclude(identifier=utils.PRIMARY):
             if not subaudit.validated():
                 sample_size = max(
