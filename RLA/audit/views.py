@@ -1,10 +1,8 @@
 import math
-import random
 from decimal import Decimal
 
-import pandas as pd
-from cryptorandom.sample import random_sample
 import numpy as np
+import pandas as pd
 from django.http import Http404, HttpResponseServerError
 from django.shortcuts import render, redirect
 from django.utils import timezone
@@ -201,18 +199,33 @@ class PluralityRecountView(TemplateView):
 
     def _get_sample_size(self, audit):
         primary_subaudit = audit.subaudit_set.get(identifier=utils.PRIMARY)
-        votes = list(primary_subaudit.vote_count.values())
-        votes.sort(reverse=True)
-        candidates = list(primary_subaudit.vote_count.keys())
-        candidates = sorted(candidates, key=lambda c: primary_subaudit.vote_count[c], reverse=True)
-        W = candidates[:audit.n_winners]
-        L = candidates[audit.n_winners:]
-        sample_size = utils.ASN(
-            audit.risk_limit / audit.max_p_value,
-            primary_subaudit.vote_count,
-            W,
-            L
-        )
+        if audit.audit_type == utils.BALLOT_POLLING:
+            votes = list(primary_subaudit.vote_count.values())
+            votes.sort(reverse=True)
+            candidates = list(primary_subaudit.vote_count.keys())
+            candidates = sorted(candidates, key=lambda c: primary_subaudit.vote_count[c], reverse=True)
+            W = candidates[:audit.n_winners]
+            L = candidates[audit.n_winners:]
+            sample_size = utils.ASN(
+                audit.risk_limit / audit.max_p_value,
+                primary_subaudit.vote_count,
+                W,
+                L
+            )
+
+        else:
+            Wp, Lp = primary_subaudit.get_W_L()
+            reported = self._transform_primary_count(audit, primary_subaudit.vote_count)
+            u = utils.MICRO_upper_bound(reported, Wp, Lp, primary_subaudit.Sw, primary_subaudit.Sl)
+            df = pd.read_csv(audit.preliminary_count.path)
+            V = df.groupby('table').sum()['votes'].max()
+            um = u * V
+            U = um * len(df['table'].unique())
+            sample_size = utils.comparison_sample_size(
+                U,
+                audit.risk_limit / primary_subaudit.max_p_value
+            )
+
         sample_size = min(sample_size, len(audit.shuffled))
         return sample_size
 
@@ -257,14 +270,12 @@ class PluralityRecountView(TemplateView):
             shuffled = sorted(shuffled, key=lambda pair: pair[0])
             sample_size = len(shuffled)
 
-        random.seed(seed)
-        shuffled = random.choices(shuffled, weights=weights, k=sample_size)
-        # shuffled = random_sample(
-        #     shuffled,
-        #     len(shuffled),
-        #     method='Fisher-Yates',
-        #     prng=int.from_bytes(seed, 'big')
-        # )
+        shuffled = utils.random_sample(
+            population=shuffled,
+            sample_size=sample_size,
+            weights=weights,
+            seed=seed
+        )
         audit.random_seed = seed
         audit.shuffled = shuffled
         audit.save()
@@ -368,8 +379,6 @@ class PluralityRecountView(TemplateView):
 
         sample_size = self._get_sample_size(audit)
         draw_size = sample_size
-        if audit.audit_type == utils.COMPARISON:
-            draw_size = self._samplesize2tables(audit, sample_size)
 
         form = RecountForm(initial={'recounted_ballots': sample_size})
 
@@ -417,8 +426,6 @@ class PluralityRecountView(TemplateView):
 
         sample_size = self._get_sample_size(audit)
         draw_size = sample_size
-        if audit.audit_type == utils.COMPARISON:
-            draw_size = self._samplesize2tables(audit, sample_size)
 
         tables = utils.get_sample(audit, draw_size)
         context = {

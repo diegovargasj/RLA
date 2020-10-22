@@ -12,7 +12,7 @@ class Audit(models.Model):
     election_type = models.CharField(max_length=16)
     audit_type = models.CharField(max_length=16)
     risk_limit = models.FloatField()
-    random_seed = models.BinaryField(blank=True, null=True)
+    random_seed = models.CharField(max_length=128, blank=True, null=True)
     random_seed_time = models.DateTimeField()
     n_winners = models.IntegerField(default=1)
     max_polls = models.IntegerField()
@@ -68,7 +68,7 @@ class SubAudit(models.Model):
     Sw = PickledObjectField()
     Sl = PickledObjectField()
     T = PickledObjectField()
-    max_p_value = models.FloatField(default=0)
+    max_p_value = models.FloatField(default=1)
     vote_count = PickledObjectField()
 
     class Meta:
